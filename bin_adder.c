@@ -13,12 +13,12 @@
 
 extern int errno;
 
-enum state {idle, want_in, in_cs};
+typedef enum {idle, want_in, in_cs} state;
 extern int turn;
-extern state flag[n];
-
-int shmid;
-int *shmptr;
+int listid;
+int stateid;
+int *listptr;
+state *stateptr;
 
 void critical_section(){
 
@@ -30,25 +30,56 @@ void remainder_section(){
 
 }
 
+
+void cleanup(){
+	shmdt(listptr);
+	shmdt(stateptr);
+}
 int main(int argc, char *argv[]){	
 	
+	int index = atoi(argv[1]);
+	int depth = atoi(argv[2]);
+	int list_size = atoi(argv[3]);
+	int max_proc = atoi(argv[4]);
+
 	//request shared memory
 	key_t key = ftok("./README", 'a');
-	shmid = shmget(key, sizeof(int) * 32, IPC_EXCL);
-	if (shmid == -1){
+	listid = shmget(key, sizeof(int) * list_size, IPC_EXCL);
+	if (listid == -1){
 		perror("Shared memory could not be created");
 		printf("exiting\n\n");
+		cleanup();
 		exit(0);
 	}
 	
 	//attach shared memory
-	shmptr = (int *)shmat(shmid, 0, 0);
+	listptr = (int *)shmat(listid, 0, 0);
 	
-	if (shmptr == (int *) -1) {
+	if (listptr == (int *) -1) {
 		perror("Shared memory could not be attached");
 	}
 	
-	shmdt(shmptr);
+
+	//request shared memory
+	key_t key2 = ftok(".", 'a');
+	stateid = shmget(key2, sizeof(state) * max_proc, IPC_EXCL);
+	if (stateid == -1){
+		perror("Shared memory could not be got - state");
+		printf("exiting\n\n");
+		cleanup();
+		exit(0);
+	}
+	
+	//attach shared memory
+	stateptr = (state *)shmat(stateid, 0, 0);
+	
+	if (stateptr == (state *) -1) {
+		perror("Shared memory could not be attached");
+	}
+
+
+	printf("success i think\n\n");
+	cleanup();
 
 	return 0;
 }

@@ -12,7 +12,7 @@
 #include <sys/wait.h>
 
 
-enum state { idle, want_in, in_cs};
+typedef enum { idle, want_in, in_cs} state;
 int turn;
 
 
@@ -26,6 +26,8 @@ int max_time = 100; //default
 int pid_count = 0;
 int shmid;
 int *shmptr;
+int shmid2;
+state *shmptr2;
 
 void init_pidlist(){
 	//sets all pids to zero, zero will indicate an open slot
@@ -234,6 +236,22 @@ int main(int argc, char *argv[]){
 	if (shmptr == (int *) -1) {
 		perror("Shared memory could not be attached");
 	}
+	key_t key2 = ftok(".", 'a');
+	shmid2 = shmget(key2, sizeof(state) * max_proc, IPC_CREAT | 0666);
+	if (shmid2 == -1){
+		perror("Shared memory could not be created");
+		printf("exiting\n\n");
+		exit(0);
+	}
+	
+	//attach shared memory
+	shmptr2 = (state *)shmat(shmid2, 0, 0);
+	
+	if (shmptr2 == (state *) -1) {
+		perror("Shared memory could not be attached");
+	}
+	
+
 	
 
 	/*****************************************************************************/
@@ -267,8 +285,8 @@ int main(int argc, char *argv[]){
 	}
 
 	/*****************************************************************************/
-
-	
+	system("./bin_adder 0 0 32 20");
+	shmdt(shmptr2);	
 	shmdt(shmptr);
 	printf("detached in master\n\n");
 	shmctl(shmid, IPC_RMID, NULL);
