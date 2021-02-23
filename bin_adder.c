@@ -19,6 +19,7 @@ int listid;
 int stateid;
 int turnid;
 int *listptr, *turn;
+int index;
 state *stateptr;
 
 void cleanup(){
@@ -34,12 +35,12 @@ void kill_handler(){
 }
 void critical_section(){
 
-
+printf("in critical section\n");
 }
 
 void remainder_section(){
 
-
+printf("in remainder section\n");
 }
 
 int int_power(int base, int power){
@@ -57,7 +58,7 @@ int int_power(int base, int power){
 
 int main(int argc, char *argv[]){	
 	signal(SIGKILL, kill_handler);
-	int index = atoi(argv[1]);
+	index = atoi(argv[1]);
 	int depth = atoi(argv[2]);
 	int list_size = atoi(argv[3]);
 	int max_proc = atoi(argv[4]);
@@ -118,17 +119,17 @@ int main(int argc, char *argv[]){
 	int next_index = index + list_size/int_power(2, depth);
 
 	
-	printf("in child proc index: %d next-index: %d  depth: %d nums: %d proc: %d flag id: %d adding %d to %d \n", index, next_index, depth, list_size, max_proc, id, listptr[index], listptr[next_index]);
-	
+	//printf("in child proc index: %d next-index: %d  depth: %d nums: %d proc: %d flag id: %d adding %d to %d \n", index, next_index, depth, list_size, max_proc, id, listptr[index], listptr[next_index]);
 
 	listptr[index] = listptr[index] + listptr[next_index];
 	//following code is from solution 4 from notes
-	/*
+	
 	int j;
 	do {
-		do {
+		do  {
+		printf(" ");
 			stateptr[id] = want_in;
-			j=turn[0];
+			j = *turn;
 			while (j != id){
 				j = (stateptr[j] != idle) ? *turn : (j + 1) % max_proc;
 			}
@@ -149,9 +150,9 @@ int main(int argc, char *argv[]){
 		*turn = j;
 		stateptr[id] = idle;
 		remainder_section();
+		cleanup();
 	} while (1);
-	*/
-	printf("success i think\n\n");
+	
 	cleanup();
 
 	return 0;

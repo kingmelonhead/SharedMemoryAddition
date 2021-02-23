@@ -86,7 +86,7 @@ int get_num_count(){
 				num_count++;
 			}
 		}
-		printf("There were %d words found\n\n", num_count);
+		//printf("There were %d words found\n\n", num_count);
 	}
 	fclose(fileptr);
 	return num_count;
@@ -183,6 +183,17 @@ int get_place(){
 
 }
 
+int check_for_process(){
+	int i;
+	int flag = 0;
+	for (i=0; i<max_proc; i++){
+		if (pidlist[i] != 0){
+			flag = 1;
+		}
+	}
+	return flag;
+}
+
 
 int main(int argc, char *argv[]){
 
@@ -254,7 +265,7 @@ int main(int argc, char *argv[]){
 		case 's':
 			printf("setting children\n\n");
 			max_proc = atoi(optarg);
-			printf("mac proc is now %d\n", max_proc);
+			//printf("mac proc is now %d\n", max_proc);
 			break;
 		case 't':
 			printf("setting time\n\n");
@@ -370,11 +381,17 @@ int main(int argc, char *argv[]){
 	/*****************************************************************************/
 	for (i = depth; i>0; i--){
 		while (pid_count != 0){
+			if (check_for_process() == 0){
+				//these errors were just for debugging
+				//printf("Pid counter wasn't decremented properly and is being manually set to zero\n");
+				//printf("becasue there are no pids in the table.\n\n");
+				pid_count = 0;
+			}
 
 		}
-		printf("entering depth: %d\n", i);
-		printf("before:\n");
-		print_shm(total_slots);
+	//	printf("entering depth: %d\n", i);
+		//printf("before:\n");
+		//print_shm(total_slots);
 		shmptr3[0] = -1;
 		sprintf(depth_string, "%d", i);
 		jump *= 2;
@@ -387,7 +404,7 @@ int main(int argc, char *argv[]){
 							sprintf(index_string, "%d", j);
 							pid_count++;
 							loc = get_place();
-							printf("about to fork with pid of %d and a max of %d \n", pid_count, max_proc);
+							//printf("about to fork with pid of %d and a max of %d \n", pid_count, max_proc);
 							pidlist[loc] = fork();
 							if (pidlist[loc] == -1){
 								printf("fork failed\n");
@@ -395,7 +412,7 @@ int main(int argc, char *argv[]){
 							}
 							if (pidlist[loc] == 0){
 								sprintf(id_string, "%d", loc);
-								printf("forking child in depth %d\n", i);
+								//printf("forking child in depth %d\n", i);
 								execl("./bin_adder", "./bin_adder", index_string, depth_string, count_string, proc_string, id_string, (char*)0 );
 							}
 							else {
@@ -408,17 +425,22 @@ int main(int argc, char *argv[]){
 			}
 		} while (1);
 		while (pid_count != 0){
-
+			if (check_for_process() == 0){
+				//errors were just used for debugging
+				//printf("Pid counter wasn't decremented properly and is being manually set to zero\n");
+				//printf("becasue there are no pids in the table.\n\n");
+				pid_count = 0;
+			}
 		}
-		printf("after:\n");
-		print_shm(total_slots);
-		printf("finished pass %d\n", i);
+		//printf("after:\n");
+		//print_shm(total_slots);
+		//printf("finished pass %d\n", i);
 	}
 	while (pid_count != 0){
 	
 	}
-	printf("Sum %d\n", shmptr[0]);
-	print_shm(total_slots);
+	printf("\nSum %d\n", shmptr[0]);
+	//print_shm(total_slots);
 	cleanup();
 	return 0;
 }
