@@ -10,10 +10,9 @@
 #include <sys/shm.h>
 #include <errno.h>
 #include <sys/wait.h>
-
+#include <string.h>
 
 typedef enum { idle, want_in, in_cs} state;
-int turn;
 
 
 //used for perror
@@ -21,12 +20,11 @@ extern int errno;
 
 //global variables, may be used directly by error handling function
 pid_t *pidlist;
-int max_proc = 20; //default
+int max_proc = 19; //default
 int max_time = 100; //default
 int pid_count = 0;
-int shmid;
-int *shmptr;
-int shmid2;
+int shmid, shmid2, shmid3;
+int *shmptr, *shmptr3;
 state *shmptr2;
 
 void init_pidlist(){
@@ -38,9 +36,39 @@ void init_pidlist(){
 
 }
 
+void kill_pids(){
+	int i; 
+	for (i=0; i<max_proc; i++){
+		if (pidlist[i] != 0){
+			kill(pidlist[i], SIGKILL);
+		}
+	}
+
+}
+
+void cleanup(){
+	shmdt(shmptr);
+	shmdt(shmptr2);
+	shmdt(shmptr3);
+	kill_pids();
+	shmctl(shmid, IPC_RMID, NULL);
+	shmctl(shmid2, IPC_RMID, NULL);
+	shmctl(shmid3, IPC_RMID, NULL);
+	free(pidlist);
+}
+
+
 void display_help(){
 
 
+}
+void init_flags(){
+	int i;
+	for (i=0; i<max_proc; i++){
+		shmptr2[i] = idle;
+
+	}
+	
 }
 int get_num_count(){
 	//gets the number of numbers in the file
@@ -118,23 +146,23 @@ void find_and_remove(pid_t pid){
 			break;
 		}
 	}
+	pid_count--;
 }
 
 void ctrl_c_handler(){
 	//function for handling ctrl c interupt
 	// (insert kill all children)
-	printf("signal caught\n\n");
+	cleanup();
 	exit(0);
 }
 
-void child_handler(int signum){
+void child_handler(int sig){
 	//function for handling when a child dies
 	pid_t pid;
-	int status;
-	while ((pid = waitpid(-1, &status, WNOHANG)) != -1){
-		pid_count--;
+	while ((pid = waitpid((pid_t)(-1), 0, WNOHANG)) > 0) {
 		find_and_remove(pid);
 	}
+	
 }
 
 void print_shm(int x){
@@ -145,6 +173,17 @@ void print_shm(int x){
 	printf("\n");
 }
 
+int get_place(){
+	int place;
+	for (place = 0; place < max_proc; place++){
+		if (pidlist[place] == 0){
+			return place;
+		}
+	}
+
+}
+
+
 int main(int argc, char *argv[]){
 
 	/*******************************************************************************/
@@ -152,16 +191,27 @@ int main(int argc, char *argv[]){
 	//sets up the signal handlers
 
 	signal(SIGINT, ctrl_c_handler);
-	signal(SIGCHLD, child_handler);
+//	signal(SIGCHLD, child_handler);
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = child_handler;
+	sigaction(SIGCHLD, &sa, NULL);
 
 	/******************************************************************************/
 
 	int *numbers;
 	char int_buffer[50];
+	char count_string[12];
+	char depth_string[12];
+	char index_string[12];
+	char proc_string[3];
+	char id_string[3];
 	FILE *fileptr;
 	char ch;
-	int total_slots, zeros, num_count, opt, childpid, i;
-
+	int total_slots, zeros, num_count, opt, i, j, loc;
+	int depth = 0;
+	int index = 0;
+	int jump = 1;
 	/******************************************************************************/
 
 	//pass through file, gets number of numbers
@@ -189,6 +239,7 @@ int main(int argc, char *argv[]){
 		total_slots = num_count + zeros;
 	}
 
+	depth = log2(total_slots);	
 
 	/*****************************************************************************/
 
@@ -202,11 +253,12 @@ int main(int argc, char *argv[]){
 			break;
 		case 's':
 			printf("setting children\n\n");
-			max_proc = *optarg;
+			max_proc = atoi(optarg);
+			printf("mac proc is now %d\n", max_proc);
 			break;
 		case 't':
 			printf("setting time\n\n");
-			max_time = *optarg;
+			max_time = atoi(optarg);
 			break;
 		default:
 			printf("Error: invalid argument, calling help menu and exiting...\n\n");
@@ -220,6 +272,8 @@ int main(int argc, char *argv[]){
 	init_pidlist();
 
 	/*****************************************************************************/
+	
+	//FIRST SHARED MEMORY SEGMENT IS FOR THE NUMBERS THAT ARE BEING ADDED TOGETHER
 	
 	//request shared memory
 	key_t key = ftok("./README", 'a');
@@ -236,6 +290,11 @@ int main(int argc, char *argv[]){
 	if (shmptr == (int *) -1) {
 		perror("Shared memory could not be attached");
 	}
+
+	//2ND SHARED MEMORY SEGMENT IS FOR THE PID LIST, THIS IS USED TO COORDINATE
+	//THE INDEX OF EACH CHILD IN THE FLAG ARRAY SO THE PROCCESSES CAN BE TOLD 
+	//WHERE EXACTLY THEIR FLAG IS IN THE ARRAY
+
 	key_t key2 = ftok(".", 'a');
 	shmid2 = shmget(key2, sizeof(state) * max_proc, IPC_CREAT | 0666);
 	if (shmid2 == -1){
@@ -251,8 +310,27 @@ int main(int argc, char *argv[]){
 		perror("Shared memory could not be attached");
 	}
 	
+	init_flags();
 
+
+	//3RD SHARED MEMORY IS FOR TURN VARIABLE USED BY THE CHILDREN
+
+	key_t key3 = ftok("./Makefile", 'a');
+	shmid3 = shmget(key3, sizeof(int), IPC_CREAT | 0666);
+	if (shmid3 == -1){
+		perror("Shared memory could not be created");
+		printf("exiting\n\n");
+		exit(0);
+	}
 	
+	//attach shared memory
+	shmptr3 = (int *)shmat(shmid3, 0, 0);
+	
+	if (shmptr3 == (int *) -1) {
+		perror("Shared memory could not be attached");
+	}
+
+	shmptr3[0] = -1;
 
 	/*****************************************************************************/
 
@@ -284,12 +362,63 @@ int main(int argc, char *argv[]){
 		}
 	}
 
+	sprintf(index_string, "%d", index);
+	sprintf(proc_string, "%d", max_proc);
+	sprintf(depth_string, "%d", depth);
+	sprintf(count_string, "%d", total_slots);
+
 	/*****************************************************************************/
-	system("./bin_adder 0 0 32 20");
-	shmdt(shmptr2);	
-	shmdt(shmptr);
-	printf("detached in master\n\n");
-	shmctl(shmid, IPC_RMID, NULL);
+	for (i = depth; i>0; i--){
+		while (pid_count != 0){
+
+		}
+		printf("entering depth: %d\n", i);
+		printf("before:\n");
+		print_shm(total_slots);
+		shmptr3[0] = -1;
+		sprintf(depth_string, "%d", i);
+		jump *= 2;
+		do {
+			if (pid_count == 0){
+				for (j=0; j<total_slots; j += jump){
+					while (1){
+						//printf("pid count - %d\n", pid_count);
+						if (pid_count < max_proc){
+							sprintf(index_string, "%d", j);
+							pid_count++;
+							loc = get_place();
+							printf("about to fork with pid of %d and a max of %d \n", pid_count, max_proc);
+							pidlist[loc] = fork();
+							if (pidlist[loc] == -1){
+								printf("fork failed\n");
+
+							}
+							if (pidlist[loc] == 0){
+								sprintf(id_string, "%d", loc);
+								printf("forking child in depth %d\n", i);
+								execl("./bin_adder", "./bin_adder", index_string, depth_string, count_string, proc_string, id_string, (char*)0 );
+							}
+							else {
+								break;
+							}
+						}
+					}
+				}
+				break;
+			}
+		} while (1);
+		while (pid_count != 0){
+
+		}
+		printf("after:\n");
+		print_shm(total_slots);
+		printf("finished pass %d\n", i);
+	}
+	while (pid_count != 0){
 	
+	}
+	printf("Sum %d\n", shmptr[0]);
+	print_shm(total_slots);
+	cleanup();
 	return 0;
 }
