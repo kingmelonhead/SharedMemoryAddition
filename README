@@ -1,6 +1,9 @@
 John Hackstadt
 Assignment 2 - OS
 
+
+github url: https://github.com/kingmelonhead/hackstad.2
+
 What Program Does ----------------------------------------------------
 
 takes a list of numbers from nums.txt 
@@ -55,3 +58,11 @@ Issues ----------------------------------------------------------------
 	my program is too fast so almost all the times are always the same. I tried to fix this using libraries with "more precise" times, but it ended up not working the way I had wanted it to.
 	it couldnt get the real time in nanoseconds, I could only do elapsed time and the prompt asked for the actual time (per my understanding). Becasue of this unfortunately I had to revert to 
 	a less precise clock
+
+	I also had an issue where the pid_count variable wasnt decrementing for each child death that was handled and it doesnt make sense because for every death
+	the pid was removed from the pid table, as confirmed by using "top -u hackstad" during runtime. The processes would 100% be dead and the zombies were reaped but the
+	count was inaccurate. To deal with this, at the start of each depth I had a function check to make sure the pid table was empty and if it was it would force the count back
+	to zero.
+
+	the last severe issue I had, that no one I asked was able to help with, was the critical section code would completely get skipped over. (everything inside both of the do {} while structures)
+	and for some unknown reason, printing a single " " to stdout made the stuff in the do {} while () structures work.
