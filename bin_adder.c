@@ -10,19 +10,33 @@
 #include <sys/shm.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <time.h>
 
 extern int errno;
 
 typedef enum {idle, want_in, in_cs} state;
 
+
+//globals, used by handlers and many functions so it is easier
+//to leave them global
 int listid;
 int stateid;
 int turnid;
 int *listptr, *turn;
-int index;
+int index, depth, list_size, max_proc;
 state *stateptr;
 
+int temp1, temp2;
+
+//structs for holding the time info of the 3 probe times
+struct tm * starttimeinfo;
+struct tm * critstartinfo;
+struct tm * critendinfo;
+
+pid_t pid;
+
 void cleanup(){
+	//used to detach shared memory at cleanup time
 	shmdt(listptr);
 	shmdt(stateptr);
 	shmdt(turn);
@@ -30,17 +44,35 @@ void cleanup(){
 }
 
 void kill_handler(){
+	//handler for early termination
+	//ie. if the parent shuts down early and must end the chilldren
 	cleanup();
 
 }
 void critical_section(){
+	time_t start_crit, end_crit;
+	
+	//section used to house the log file output, this must be done automically
+	
 
-printf("in critical section\n");
+	//used to mark enter crit section time
+	time(&start_crit);
+	critstartinfo = localtime(&start_crit);
+	//prints log info to the log file
+	FILE *fileptr;
+	fileptr = fopen("adder_log.log", "a");
+	fprintf(fileptr, "Time process started: %s PID: %d Index: %d Depth: %d\n\n", asctime(starttimeinfo), pid, index, depth);
+	fclose(fileptr); //close file
+	//record end time
+	time(&end_crit);
+	critendinfo = localtime(&end_crit);
+
+
 }
 
 void remainder_section(){
-
-printf("in remainder section\n");
+	//used to house the non atomic stuff, like outputting a simple time to the console
+	fprintf(stderr, "PID:%d entered critical section: %s and left critical section: %s and added %d to %d \n\n", pid, asctime(critstartinfo), asctime(critendinfo), temp1, temp2);
 }
 
 int int_power(int base, int power){
@@ -56,13 +88,27 @@ int int_power(int base, int power){
 	return result;
 }
 
-int main(int argc, char *argv[]){	
+int main(int argc, char *argv[]){
+
+time_t time_start;
+	//set up signal to ahndle being killed by the parent
+
 	signal(SIGKILL, kill_handler);
+
+	//set up time that the program starts
+	time(&time_start);
+	starttimeinfo = localtime(&time_start);
+
+	//variable declarations
 	index = atoi(argv[1]);
-	int depth = atoi(argv[2]);
-	int list_size = atoi(argv[3]);
-	int max_proc = atoi(argv[4]);
+	depth = atoi(argv[2]);
+	list_size = atoi(argv[3]);
+	max_proc = atoi(argv[4]);
 	int id = atoi(argv[5]);
+	pid = atoi(argv[6]);
+
+	//printf("pid = %d\n", pid);
+
 
 	//request shm
 	key_t key = ftok("./README", 'a');
@@ -120,12 +166,14 @@ int main(int argc, char *argv[]){
 
 	
 	//printf("in child proc index: %d next-index: %d  depth: %d nums: %d proc: %d flag id: %d adding %d to %d \n", index, next_index, depth, list_size, max_proc, id, listptr[index], listptr[next_index]);
-
+	temp1 = listptr[index];
+	temp2 = listptr[next_index];
 	listptr[index] = listptr[index] + listptr[next_index];
 	//following code is from solution 4 from notes
 	
 	int j;
 	do {
+	printf(" ");
 		do  {
 		printf(" ");
 			stateptr[id] = want_in;

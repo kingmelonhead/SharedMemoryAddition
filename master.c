@@ -37,6 +37,7 @@ void init_pidlist(){
 }
 
 void kill_pids(){
+	//function to kill all pids on the event of early termination
 	int i; 
 	for (i=0; i<max_proc; i++){
 		if (pidlist[i] != 0){
@@ -47,6 +48,8 @@ void kill_pids(){
 }
 
 void cleanup(){
+	//used to detatch and delete all shared memory after both normal end of runtime
+	//and on early termination
 	shmdt(shmptr);
 	shmdt(shmptr2);
 	shmdt(shmptr3);
@@ -59,10 +62,19 @@ void cleanup(){
 
 
 void display_help(){
-
-
+	//displays how to use options/call program in general
+	printf("\nHello, this program takes in a list of numbers from a file. Must be one number per line.\n");
+	printf("The file that gets read from is nums.txt. Note: Make sure there are no empty lines at the end of the file or spaces between numbers\n");
+	printf("The program is called in the following way:\n\n");
+	printf("./master [-s] [max processes] [-t] [time]\n\n");
+	printf(" or ./master [-h] \n\n");
+	printf("The [-s] option allows you to overwrite the max number of processes allowed, this includes the parent proccess\n");
+	printf("Note: if a number greater than 20 is entered, it is reset to 20. This is a max proccess allowment from the professor.\n\n");
+	printf("The [-t] option allows you to overwrite the number of time that the program is allowed to run. By default this is 100 seconds.\n");
+	printf("Note: if a number greater than 100 is entered, it is reset to 100. This is a max time allowment from the professor.\n\n");
 }
 void init_flags(){
+	//used to set all flags to idle at start
 	int i;
 	for (i=0; i<max_proc; i++){
 		shmptr2[i] = idle;
@@ -77,7 +89,8 @@ int get_num_count(){
 	char ch;
 	fileptr = fopen("nums.txt", "r");
 	if (fileptr == NULL){
-		printf("Error: file not found!\n\n");
+		perror("master: Error: file not found!\n\n");
+		printf("File not found so exiting\n");
 		exit(0);
 	}
 	else {
@@ -166,6 +179,7 @@ void child_handler(int sig){
 }
 
 void print_shm(int x){
+	//used for debugging and testing that everything is working
 	int i;
 	for (i=0; i<x; i++){
 		printf("%d\n", shmptr[i]);
@@ -174,6 +188,7 @@ void print_shm(int x){
 }
 
 int get_place(){
+	//used to get the index of a pid in the list, used to tell the children what flag is theirs to control
 	int place;
 	for (place = 0; place < max_proc; place++){
 		if (pidlist[place] == 0){
@@ -184,6 +199,7 @@ int get_place(){
 }
 
 int check_for_process(){
+	//function to check to see if the pid_count lines up with the number of pids in the table
 	int i;
 	int flag = 0;
 	for (i=0; i<max_proc; i++){
@@ -194,8 +210,17 @@ int check_for_process(){
 	return flag;
 }
 
+void time_handler(){
+	//function used to handle time out
+	cleanup();
+	exit(0);
+}
+
 
 int main(int argc, char *argv[]){
+
+
+	system("touch adder_log.log");
 
 	/*******************************************************************************/
 
@@ -207,6 +232,7 @@ int main(int argc, char *argv[]){
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = child_handler;
 	sigaction(SIGCHLD, &sa, NULL);
+	signal(SIGALRM, time_handler);
 
 	/******************************************************************************/
 
@@ -217,12 +243,14 @@ int main(int argc, char *argv[]){
 	char index_string[12];
 	char proc_string[3];
 	char id_string[3];
+	char pid_string[10];
 	FILE *fileptr;
 	char ch;
 	int total_slots, zeros, num_count, opt, i, j, loc;
 	int depth = 0;
 	int index = 0;
 	int jump = 1;
+	int temp_pid;
 	/******************************************************************************/
 
 	//pass through file, gets number of numbers
@@ -265,11 +293,20 @@ int main(int argc, char *argv[]){
 		case 's':
 			printf("setting children\n\n");
 			max_proc = atoi(optarg);
+			max_proc--;
+			if (max_proc > 19){
+				max_proc = 19;
+				printf("Max process passed is too high, defaulting to 20\n");
+			}
 			//printf("mac proc is now %d\n", max_proc);
 			break;
 		case 't':
-			printf("setting time\n\n");
+			printf("setting new time\n\n");
 			max_time = atoi(optarg);
+			if (max_time > 100){
+				max_time = 100;
+				printf("Max time passed is too high, defaulting to 100\n");
+			}
 			break;
 		default:
 			printf("Error: invalid argument, calling help menu and exiting...\n\n");
@@ -277,10 +314,12 @@ int main(int argc, char *argv[]){
 			exit(0);
 		}
 	}
+	alarm(max_time);
 	
 	//uses max_proc to give the pid list memory
 	pidlist = malloc(sizeof(pid_t) * max_proc);
 	init_pidlist();
+
 
 	/*****************************************************************************/
 	
@@ -290,8 +329,9 @@ int main(int argc, char *argv[]){
 	key_t key = ftok("./README", 'a');
 	shmid = shmget(key, sizeof(int) * total_slots, IPC_CREAT | 0666);
 	if (shmid == -1){
-		perror("Shared memory could not be created");
+		perror("master: Error: Shared memory could not be created");
 		printf("exiting\n\n");
+		cleanup();
 		exit(0);
 	}
 	
@@ -299,7 +339,9 @@ int main(int argc, char *argv[]){
 	shmptr = (int *)shmat(shmid, 0, 0);
 	
 	if (shmptr == (int *) -1) {
-		perror("Shared memory could not be attached");
+		perror("master: Error: Shared memory could not be attached");
+		cleanup();
+		exit(0);
 	}
 
 	//2ND SHARED MEMORY SEGMENT IS FOR THE PID LIST, THIS IS USED TO COORDINATE
@@ -309,8 +351,9 @@ int main(int argc, char *argv[]){
 	key_t key2 = ftok(".", 'a');
 	shmid2 = shmget(key2, sizeof(state) * max_proc, IPC_CREAT | 0666);
 	if (shmid2 == -1){
-		perror("Shared memory could not be created");
+		perror("master: Error: Shared memory could not be created");
 		printf("exiting\n\n");
+		cleanup();
 		exit(0);
 	}
 	
@@ -319,6 +362,8 @@ int main(int argc, char *argv[]){
 	
 	if (shmptr2 == (state *) -1) {
 		perror("Shared memory could not be attached");
+		cleanup();
+		exit(0);
 	}
 	
 	init_flags();
@@ -329,8 +374,9 @@ int main(int argc, char *argv[]){
 	key_t key3 = ftok("./Makefile", 'a');
 	shmid3 = shmget(key3, sizeof(int), IPC_CREAT | 0666);
 	if (shmid3 == -1){
-		perror("Shared memory could not be created");
+		perror("master: Error: Shared memory could not be created");
 		printf("exiting\n\n");
+		cleanup();
 		exit(0);
 	}
 	
@@ -338,7 +384,9 @@ int main(int argc, char *argv[]){
 	shmptr3 = (int *)shmat(shmid3, 0, 0);
 	
 	if (shmptr3 == (int *) -1) {
-		perror("Shared memory could not be attached");
+		perror("master: Error: Shared memory could not be attached");
+		cleanup();
+		exit(0);
 	}
 
 	shmptr3[0] = -1;
@@ -379,6 +427,11 @@ int main(int argc, char *argv[]){
 	sprintf(count_string, "%d", total_slots);
 
 	/*****************************************************************************/
+
+	//
+	//this code loops through the different depths spawning children to do work 
+	//at the start of each depth it ensures all children have finished
+	//
 	for (i = depth; i>0; i--){
 		while (pid_count != 0){
 			if (check_for_process() == 0){
@@ -407,17 +460,20 @@ int main(int argc, char *argv[]){
 							//printf("about to fork with pid of %d and a max of %d \n", pid_count, max_proc);
 							pidlist[loc] = fork();
 							if (pidlist[loc] == -1){
-								printf("fork failed\n");
+								perror("master: Error: fork failed");
 
 							}
-							if (pidlist[loc] == 0){
-								sprintf(id_string, "%d", loc);
-								//printf("forking child in depth %d\n", i);
-								execl("./bin_adder", "./bin_adder", index_string, depth_string, count_string, proc_string, id_string, (char*)0 );
-							}
-							else {
+							if (pidlist[loc] != 0){
+								temp_pid = pidlist[loc];
 								break;
 							}
+							else if (pidlist[loc] == 0){
+								sprintf(pid_string, "%d", temp_pid);
+								sprintf(id_string, "%d", loc);
+								//printf("forking child in depth %d\n", i);
+								execl("./bin_adder", "./bin_adder", index_string, depth_string, count_string, proc_string, id_string, pid_string, (char*)0 );
+							}
+							
 						}
 					}
 				}
@@ -437,7 +493,9 @@ int main(int argc, char *argv[]){
 		//printf("finished pass %d\n", i);
 	}
 	while (pid_count != 0){
-	
+		if (check_for_process() == 0){
+			pid_count = 0;
+		}
 	}
 	printf("\nSum %d\n", shmptr[0]);
 	//print_shm(total_slots);

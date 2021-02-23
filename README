@@ -1,6 +1,57 @@
 John Hackstadt
 Assignment 2 - OS
 
+What Program Does ----------------------------------------------------
+
+takes a list of numbers from nums.txt 
+	-this file is included in the project, just edit it if you would like
+	-numbers must be one per line, no spaces after the numbers, and no blank lines at the end of the file
+
+counts numbers and puts numbers into shared memory. From here bin_adder processes are spwaned and start adding
+pairs together. It does this until the sum is left in the first index of the shared memory
+
+the user has the option to use the -s option with an argument to change the max number of processes allowed, by default this is 20. If the user specifies anything more
+than 20 then it reverts back to the default of 20 processes
+
+the user has the option to use the -t option to set a max time the program can run, by default it is 100. If the user enters more than 100 then it reverts to the 
+default of 100 seconds
+
+the last option is the -h option to simple display a help menu and exit
+
+if no numbers are found in the file, then it will exit early
+
+early termination of the program at any point will result in the child processes being killed, and the memory being detached
+
+at the end of the master process the sum will be printed to std out
+
+bin_adder functionality ------------------------------------------------
+
+the childrens job is to add numbers in the pairs that get assigned to them and write to shared memory
+
+they also utilize a critical section. In my program I copied solution 4 from the notes and modified it a little to work with my variable names
+since this is the algorithm we were told to use.
+
+bin_adder also logs to adder_log.log. This is done in the critical section. Information includes the time, pid, index, and depth
+
+in the remainder section of the code, bin adder does something similar to the log. It prints to stderr the start and end times of the critical section, and outputs what was done by the process
+(what was added)
+
+adjustments ------------------------------------------------------------
+
+I had to add a number of additional arguments to the exec call. The instructions called for just the index and depth argumnent. However, for the way my program works it made more sense
+to also ppass it the size of the list, as well as the pid, max processes count, pid, as well as the id of the given childs flag. I couldnt find a way of doing this without using more arguments or using even more shared memory.
+It would have been easy to do with shared memory, but the point of shared memory is to allow processes to share resources, but for example p1 doesnt need to know p2s pid, etc. So I just made it something that gets passed
+
+I think this was the only stuff that I deviated from the directions on, but it still functions the same
+
 Issues ----------------------------------------------------------------
 	Numbers must be entered into txt file with no extra spaces after the numbers, as well as there cannot be any
-	blank lines
+	blank lines. This seemed to be something that is a bit of a large requirement to have the user check this but I couldn't find
+	a reliable way to check this in the code.
+
+	execl was what I ended up using and i had to use sprintf to basically turn some integers into strings in order to use them for arguments
+	this seems messy, but it didnt slow down my project at all so i dont see it as an issue, but it is a little bit of a cluttered work around
+
+	my program is too fast so almost all the times are always the same. I tried to fix this using libraries with "more precise" times, but it ended up not working the way I had wanted it to.
+	it couldnt get the real time in nanoseconds, I could only do elapsed time and the prompt asked for the actual time (per my understanding). Becasue of this unfortunately I had to revert to 
+	a less precise clock
