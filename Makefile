@@ -10,4 +10,4 @@ bin_adder: bin_adder.c
 	$(CC) -o $@ $^ $(CFLAGS)
 
 clean:
-	rm master bin_adder adder_log.log
+	rm master bin_adder adder_log.log nums.txt

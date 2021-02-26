@@ -11,9 +11,9 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <time.h>
 
 typedef enum { idle, want_in, in_cs} state;
-
 
 //used for perror
 extern int errno;
@@ -26,6 +26,20 @@ int pid_count = 0;
 int shmid, shmid2, shmid3;
 int *shmptr, *shmptr3;
 state *shmptr2;
+
+void generate_numfile(){
+	//generates 64 random numbers between 0 and 256 and outputs them line by line to nums.txt
+	FILE *numfile;
+	int num, it;
+	numfile = fopen("nums.txt", "w");
+	for (it = 0; it<64; it++){
+	num = (rand() % 256);
+	fprintf(numfile, "%d\n", num);
+	}
+
+	fclose(numfile);
+
+}
 
 void init_pidlist(){
 	//sets all pids to zero, zero will indicate an open slot
@@ -65,6 +79,7 @@ void display_help(){
 	//displays how to use options/call program in general
 	printf("\nHello, this program takes in a list of numbers from a file. Must be one number per line.\n");
 	printf("The file that gets read from is nums.txt. Note: Make sure there are no empty lines at the end of the file or spaces between numbers\n");
+	printf("NOTE: for the project we were supposed to generate the number file so mine does. 64 numbers between 0 and 256\n\n");
 	printf("The program is called in the following way:\n\n");
 	printf("./master [-s] [max processes] [-t] [time]\n\n");
 	printf(" or ./master [-h] \n\n");
@@ -219,8 +234,11 @@ void time_handler(){
 
 int main(int argc, char *argv[]){
 
-
+	//makes log file
 	system("touch adder_log.log");
+
+	//seeds rand
+	srand(time(NULL));
 
 	/*******************************************************************************/
 
@@ -251,6 +269,11 @@ int main(int argc, char *argv[]){
 	int index = 0;
 	int jump = 1;
 	int temp_pid;
+
+	// generates nums.txt
+	
+	generate_numfile();
+
 	/******************************************************************************/
 
 	//pass through file, gets number of numbers
